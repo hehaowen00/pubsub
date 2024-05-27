@@ -38,7 +38,7 @@ func Publish[T any](topic string, msg T) error {
 	rw.RUnlock()
 
 	if !ok {
-		return nil
+		t = newTopic[T](topic)
 	}
 
 	v, ok := t.(*Topic[T])

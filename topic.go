@@ -7,7 +7,8 @@ import (
 )
 
 type Topic[T any] struct {
-	id int64
+	id      int64
+	history []T
 
 	recv        chan T
 	subscribers []*Subscriber[T]
@@ -19,16 +20,20 @@ type Topic[T any] struct {
 }
 
 func newTopic[T any](name string) *Topic[T] {
-	t := &Topic[T]{
-		recv:        make(chan T),
-		subEvents:   make(chan *Subscriber[T]),
-		unsubEvents: make(chan *Subscriber[T]),
+	rw.Lock()
+
+	t, ok := topics[name]
+	if !ok {
+		t := &Topic[T]{
+			recv:        make(chan T),
+			subEvents:   make(chan *Subscriber[T]),
+			unsubEvents: make(chan *Subscriber[T]),
+		}
+
+		go t.run()
+		topics[name] = t
 	}
 
-	go t.run()
-
-	rw.Lock()
-	topics[name] = t
 	rw.Unlock()
 
 	return t
@@ -46,6 +51,10 @@ outer:
 			t.id += 1
 			s.id = t.id
 
+			for _, m := range t.history {
+				s.recv <- m
+			}
+
 			t.subscribers = append(t.subscribers, s)
 		case s, ok := <-t.unsubEvents:
 			if !ok {
@@ -62,6 +71,11 @@ outer:
 		case m, ok := <-t.recv:
 			if !ok {
 				break outer
+			}
+
+			t.history = append(t.history, m)
+			if len(t.history) > 16 {
+				t.history = t.history[16:]
 			}
 
 			for _, s := range t.subscribers {
