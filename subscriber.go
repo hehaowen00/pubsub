@@ -3,13 +3,13 @@ package pubsub
 type Subscriber[T any] struct {
 	id    int64
 	recv  chan T
-	topic *Topic[T]
+	topic *topic[T]
 }
 
-func newSubscriber[T any](topic *Topic[T]) *Subscriber[T] {
+func newSubscriber[T any](t *topic[T]) *Subscriber[T] {
 	return &Subscriber[T]{
 		recv:  make(chan T, 32),
-		topic: topic,
+		topic: t,
 	}
 }
 

@@ -12,36 +12,36 @@ var (
 	ErrTypeMismatch = errors.New("type mismatch")
 )
 
-func Close[T any](topic string) {
+func Close[T any](name string) {
 	rw.Lock()
 
-	t, ok := topics[topic]
+	t, ok := topics[name]
 	if !ok {
 		return
 	}
 
-	v, ok := t.(*Topic[T])
+	v, ok := t.(*topic[T])
 	if !ok {
 		return
 	}
 
 	v.close()
 
-	delete(topics, topic)
+	delete(topics, name)
 
 	rw.Unlock()
 }
 
-func Publish[T any](topic string, msg T) error {
+func Publish[T any](name string, msg T) error {
 	rw.RLock()
-	t, ok := topics[topic]
+	t, ok := topics[name]
 	rw.RUnlock()
 
 	if !ok {
-		t = newTopic[T](topic)
+		t = newTopic[T](name)
 	}
 
-	v, ok := t.(*Topic[T])
+	v, ok := t.(*topic[T])
 	if !ok {
 		return ErrTypeMismatch
 	}
@@ -51,16 +51,16 @@ func Publish[T any](topic string, msg T) error {
 	return nil
 }
 
-func Subscribe[T any](topic string) (*Subscriber[T], error) {
+func Subscribe[T any](name string) (*Subscriber[T], error) {
 	rw.RLock()
-	t, ok := topics[topic]
+	t, ok := topics[name]
 	rw.RUnlock()
 
 	if !ok {
-		t = newTopic[T](topic)
+		t = newTopic[T](name)
 	}
 
-	v, ok := t.(*Topic[T])
+	v, ok := t.(*topic[T])
 	if !ok {
 		return nil, ErrTypeMismatch
 	}

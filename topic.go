@@ -6,9 +6,9 @@ import (
 	"sync"
 )
 
-type Topic[T any] struct {
+type topic[T any] struct {
 	id      int64
-	history []T
+	history *Ring[T]
 
 	recv        chan T
 	subscribers []*Subscriber[T]
@@ -19,12 +19,13 @@ type Topic[T any] struct {
 	once sync.Once
 }
 
-func newTopic[T any](name string) *Topic[T] {
+func newTopic[T any](name string) *topic[T] {
 	rw.Lock()
 
-	t, ok := topics[name]
+	v, ok := topics[name]
 	if !ok {
-		t := &Topic[T]{
+		t := &topic[T]{
+			history:     newRing[T](16),
 			recv:        make(chan T),
 			subEvents:   make(chan *Subscriber[T]),
 			unsubEvents: make(chan *Subscriber[T]),
@@ -32,14 +33,23 @@ func newTopic[T any](name string) *Topic[T] {
 
 		go t.run()
 		topics[name] = t
+
+		rw.Unlock()
+
+		return t
 	}
 
 	rw.Unlock()
 
+	t, ok := v.(*topic[T])
+	if !ok {
+		panic("invalid type")
+	}
+
 	return t
 }
 
-func (t *Topic[T]) run() {
+func (t *topic[T]) run() {
 outer:
 	for {
 		select {
@@ -51,9 +61,9 @@ outer:
 			t.id += 1
 			s.id = t.id
 
-			for _, m := range t.history {
-				s.recv <- m
-			}
+			t.history.Iter(func(i T) {
+				s.recv <- i
+			})
 
 			t.subscribers = append(t.subscribers, s)
 		case s, ok := <-t.unsubEvents:
@@ -73,10 +83,7 @@ outer:
 				break outer
 			}
 
-			t.history = append(t.history, m)
-			if len(t.history) > 16 {
-				t.history = t.history[16:]
-			}
+			t.history.Push(m)
 
 			for _, s := range t.subscribers {
 				s.send(m)
@@ -89,12 +96,12 @@ outer:
 	}
 }
 
-func (t *Topic[T]) publish(msg T) {
+func (t *topic[T]) publish(msg T) {
 	t.recv <- msg
 	runtime.Gosched()
 }
 
-func (t *Topic[T]) close() {
+func (t *topic[T]) close() {
 	t.once.Do(func() {
 		close(t.recv)
 		close(t.subEvents)
@@ -102,12 +109,12 @@ func (t *Topic[T]) close() {
 	})
 }
 
-func (t *Topic[T]) subscribe() *Subscriber[T] {
+func (t *topic[T]) subscribe() *Subscriber[T] {
 	sub := newSubscriber(t)
 	t.subEvents <- sub
 	return sub
 }
 
-func (t *Topic[T]) unsubscribe(sub *Subscriber[T]) {
+func (t *topic[T]) unsubscribe(sub *Subscriber[T]) {
 	t.unsubEvents <- sub
 }
