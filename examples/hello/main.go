@@ -12,7 +12,7 @@ import (
 
 func main() {
 	go func() {
-		sub, err := pubsub.Subscribe[int]("topic")
+		sub, err := pubsub.NewSubscriber[int]("topic")
 		if err != nil {
 			log.Println("error unable to subscribe", err)
 			return
@@ -31,11 +31,16 @@ func main() {
 
 	time.Sleep(time.Second)
 
-	try(pubsub.Publish("topic", 1))
-	try(pubsub.Publish("topic", 2))
+	publisher, err := pubsub.NewPublisher[int]("topic")
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println(publisher.Publish(1))
+	log.Println(publisher.Publish(2))
 
 	go func() {
-		sub, err := pubsub.Subscribe[int]("topic")
+		sub, err := pubsub.NewSubscriber[int]("topic")
 		if err != nil {
 			log.Println("error unable to subscribe", err)
 			return
@@ -54,14 +59,15 @@ func main() {
 
 	time.Sleep(time.Second)
 
-	try(pubsub.Publish("topic", 3))
-	try(pubsub.Publish("topic", 4))
+	log.Println(publisher.Publish(3))
+	log.Println(publisher.Publish(4))
 
 	pubsub.Close[int]("topic")
 
-	try(pubsub.Publish("topic", 5))
-	try(pubsub.Publish("topic", 6))
+	log.Println(publisher.Publish(5))
+	log.Println(publisher.Publish(6))
 
+	fmt.Println("Waiting for interrupt...")
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<-sig

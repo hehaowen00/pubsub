@@ -32,7 +32,7 @@ func Close[T any](name string) {
 	rw.Unlock()
 }
 
-func Publish[T any](name string, msg T) error {
+func NewPublisher[T any](name string) (*Publisher[T], error) {
 	rw.RLock()
 	t, ok := topics[name]
 	rw.RUnlock()
@@ -43,15 +43,17 @@ func Publish[T any](name string, msg T) error {
 
 	v, ok := t.(*topic[T])
 	if !ok {
-		return ErrTypeMismatch
+		return nil, ErrTypeMismatch
 	}
 
-	v.publish(msg)
+	p := &Publisher[T]{
+		t: v,
+	}
 
-	return nil
+	return p, nil
 }
 
-func Subscribe[T any](name string) (*Subscriber[T], error) {
+func NewSubscriber[T any](name string) (*Subscriber[T], error) {
 	rw.RLock()
 	t, ok := topics[name]
 	rw.RUnlock()

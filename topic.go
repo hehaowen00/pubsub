@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"context"
 	"runtime"
 	"slices"
 	"sync"
@@ -13,6 +14,9 @@ type topic[T any] struct {
 	recv        chan T
 	subscribers []*Subscriber[T]
 
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	subEvents   chan *Subscriber[T]
 	unsubEvents chan *Subscriber[T]
 
@@ -24,9 +28,14 @@ func newTopic[T any](name string) *topic[T] {
 
 	v, ok := topics[name]
 	if !ok {
+		ctx, cancel := context.WithCancel(context.Background())
 		t := &topic[T]{
-			history:     newRing[T](16),
-			recv:        make(chan T),
+			history: newRing[T](16),
+			recv:    make(chan T),
+
+			ctx:    ctx,
+			cancel: cancel,
+
 			subEvents:   make(chan *Subscriber[T]),
 			unsubEvents: make(chan *Subscriber[T]),
 		}
@@ -53,6 +62,8 @@ func (t *topic[T]) run() {
 outer:
 	for {
 		select {
+		case <-t.ctx.Done():
+			break outer
 		case s, ok := <-t.subEvents:
 			if !ok {
 				break outer
@@ -96,13 +107,21 @@ outer:
 	}
 }
 
-func (t *topic[T]) publish(msg T) {
+func (t *topic[T]) publish(msg T) error {
+	err := t.ctx.Err()
+	if err != nil {
+		return err
+	}
+
 	t.recv <- msg
 	runtime.Gosched()
+
+	return nil
 }
 
 func (t *topic[T]) close() {
 	t.once.Do(func() {
+		t.cancel()
 		close(t.recv)
 		close(t.subEvents)
 		close(t.unsubEvents)
