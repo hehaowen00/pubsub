@@ -9,8 +9,14 @@ var (
 	topics = map[string]any{}
 	rw     = sync.RWMutex{}
 
-	ErrTypeMismatch = errors.New("type mismatch")
+	ErrTopicDoesNotExist = errors.New("topic does not exist")
+	ErrTopicExists       = errors.New("topic exists")
+	ErrTypeMismatch      = errors.New("type mismatch")
 )
+
+func NewTopic[T any](name string, history ...ICache[T]) error {
+	return newTopic[T](name)
+}
 
 func Close[T any](name string) {
 	rw.Lock()
@@ -38,7 +44,8 @@ func NewPublisher[T any](name string) (*Publisher[T], error) {
 	rw.RUnlock()
 
 	if !ok {
-		t = newTopic[T](name)
+		// t = newTopic[T](name)
+		return nil, ErrTopicDoesNotExist
 	}
 
 	v, ok := t.(*topic[T])
@@ -59,7 +66,8 @@ func NewSubscriber[T any](name string) (*Subscriber[T], error) {
 	rw.RUnlock()
 
 	if !ok {
-		t = newTopic[T](name)
+		// t = newTopic[T](name)
+		return nil, ErrTopicDoesNotExist
 	}
 
 	v, ok := t.(*topic[T])

@@ -7,10 +7,10 @@ import (
 func TestRing(t *testing.T) {
 	ring := newRing[int](16)
 	for i := range 10 {
-		ring.Push(i)
+		ring.push(i)
 	}
 
-	ring.Iter(func(i int) {
+	ring.iter(func(i int) {
 		t.Log(i)
 	})
 

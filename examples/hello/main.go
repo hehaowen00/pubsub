@@ -10,24 +10,33 @@ import (
 	"github.com/hehaowen00/pubsub"
 )
 
+func subscribeLoop() {
+	sub, err := pubsub.NewSubscriber[int]("topic")
+	if err != nil {
+		log.Println("error unable to subscribe to topic: ", err)
+		return
+	}
+
+	for {
+		_, ok := <-sub.Recv()
+		if !ok {
+			fmt.Println("closed")
+			break
+		}
+
+		data := sub.Read()
+
+		fmt.Println("recv", data)
+	}
+}
+
 func main() {
-	go func() {
-		sub, err := pubsub.NewSubscriber[int]("topic")
-		if err != nil {
-			log.Println("error unable to subscribe", err)
-			return
-		}
+	err := pubsub.NewTopic[int]("topic")
+	if err != nil {
+		panic(err)
+	}
 
-		for {
-			m, ok := <-sub.Recv()
-			if !ok {
-				fmt.Println("closed")
-				break
-			}
-
-			fmt.Println("recv", m)
-		}
-	}()
+	go subscribeLoop()
 
 	time.Sleep(time.Second)
 
@@ -39,23 +48,7 @@ func main() {
 	log.Println(publisher.Publish(1))
 	log.Println(publisher.Publish(2))
 
-	go func() {
-		sub, err := pubsub.NewSubscriber[int]("topic")
-		if err != nil {
-			log.Println("error unable to subscribe", err)
-			return
-		}
-
-		for {
-			m, ok := <-sub.Recv()
-			if !ok {
-				fmt.Println("closed")
-				break
-			}
-
-			fmt.Println("recv", m)
-		}
-	}()
+	go subscribeLoop()
 
 	time.Sleep(time.Second)
 
@@ -71,10 +64,4 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<-sig
-}
-
-func try(err error) {
-	if err != nil {
-		panic(err)
-	}
 }

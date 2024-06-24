@@ -9,7 +9,7 @@ import (
 
 type topic[T any] struct {
 	id      int64
-	history *Ring[T]
+	history ICache[T]
 
 	recv        chan T
 	subscribers []*Subscriber[T]
@@ -23,14 +23,20 @@ type topic[T any] struct {
 	once sync.Once
 }
 
-func newTopic[T any](name string) *topic[T] {
+func newTopic[T any](name string, historyStrategy ...ICache[T]) error {
 	rw.Lock()
 
-	v, ok := topics[name]
+	history := NewEmptyCache[T]()
+
+	if len(historyStrategy) == 1 {
+		history = historyStrategy[0]
+	}
+
+	_, ok := topics[name]
 	if !ok {
 		ctx, cancel := context.WithCancel(context.Background())
 		t := &topic[T]{
-			history: newRing[T](16),
+			history: history,
 			recv:    make(chan T),
 
 			ctx:    ctx,
@@ -45,17 +51,12 @@ func newTopic[T any](name string) *topic[T] {
 
 		rw.Unlock()
 
-		return t
+		return nil
 	}
 
 	rw.Unlock()
 
-	t, ok := v.(*topic[T])
-	if !ok {
-		panic("invalid type")
-	}
-
-	return t
+	return ErrTopicExists
 }
 
 func (t *topic[T]) run() {
@@ -72,9 +73,11 @@ outer:
 			t.id += 1
 			s.id = t.id
 
+			s.mu.Lock()
 			t.history.Iter(func(i T) {
-				s.recv <- i
+				s.out = append(s.out, i)
 			})
+			s.mu.Unlock()
 
 			t.subscribers = append(t.subscribers, s)
 		case s, ok := <-t.unsubEvents:
@@ -82,9 +85,15 @@ outer:
 				break outer
 			}
 
-			t.subscribers = slices.DeleteFunc(t.subscribers, func(e *Subscriber[T]) bool {
-				return e.id == s.id
+			index := slices.IndexFunc(t.subscribers, func(sub *Subscriber[T]) bool {
+				return sub.id == s.id
 			})
+
+			if index == -1 {
+				continue
+			}
+
+			t.subscribers = slices.Delete(t.subscribers, index, 1)
 
 			if len(t.subscribers) == 0 {
 				t.id = 0
